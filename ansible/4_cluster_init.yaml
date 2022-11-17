@@ -1,0 +1,62 @@
+- hosts: k8s-ha1
+  become: yes
+  tasks:
+    - name: "Check if initialized"
+      stat:
+        path: "~/.cluster_initialized"
+      register: initialized
+
+    - name: initialize the cluster
+      shell: kubeadm init --control-plane-endpoint="10.20.40.20:6443" --upload-certs --apiserver-advertise-address=10.20.40.21
+      register: kubeadm_init
+      when: (initialized.stat.isreg is undefined) or (not initialized.stat.isreg)
+
+    - name: copy kubeadm_init output to file
+      copy:
+        content: "{{ kubeadm_init.stdout }}"
+        dest: "~/.cluster_initialized"
+      register: cluster_initialized
+      when: (initialized.stat.isreg is undefined) or (not initialized.stat.isreg)
+
+    - name: copy kube cluster config from k8s-ha1
+      fetch: src=/etc/kubernetes/admin.conf dest=files/admin.conf flat=yes
+
+    - name: create /root/.kube/ dir
+      file: path=/root/.kube/ state=directory
+      delegate_to: "{{item}}"
+      loop: "{{groups['cluster_nodes']}}"
+
+    - name: copy kube cluster config to all notes
+      ansible.builtin.copy:
+        src: files/admin.conf
+        dest: /root/.kube/config
+        owner: root
+        group: root
+        mode: g=r,o=r
+      delegate_to: "{{item}}"
+      loop: "{{groups['cluster_nodes']}}"
+
+    - name: Copy Calico
+      ansible.builtin.copy:
+        src: k8s-deploy/calico.yaml
+        dest: /root/.kube/calico.yaml
+
+    - name: Apply calico
+      shell: kubectl apply -f .kube/calico.yaml
+
+    - name: upload_certs
+      shell: kubeadm init phase upload-certs --upload-certs | tail -n 1
+      register: upload_certs
+
+    - set_fact: 
+        cluster_key={{ upload_certs.stdout }}
+
+    - name: prepare join_command
+      shell: kubeadm token create --print-join-command --certificate-key {{cluster_key}}
+      register: join_command
+
+    - name: join others masters to cluster
+      shell: "{{ join_command.stdout }} --apiserver-advertise-address={{hostvars[item].ansible_host}}"
+      delegate_to: "{{item}}"
+      loop: "{{groups['cluster_nodes']}}"
+      when: (item != "NLGKUBE1")

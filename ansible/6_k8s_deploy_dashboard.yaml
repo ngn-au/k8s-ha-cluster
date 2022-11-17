@@ -1,0 +1,18 @@
+- hosts: "{{ (groups['cluster_nodes'] | shuffle)[1] }}"
+  gather_facts: no
+  tasks:
+    - name: Copy Dashboard
+      ansible.builtin.copy:
+        src: k8s-deploy/dashboard.yaml
+        dest: /root/.kube/dashboard.yaml
+
+    - name: Apply dashboard
+      shell: kubectl apply -f .kube/dashboard.yaml
+
+    - name: Copy admin user
+      ansible.builtin.copy:
+        src: k8s-deploy/admin-user.yaml
+        dest: /root/.kube/admin-user.yaml
+
+    - name: Apply admin user
+      shell: kubectl apply -f .kube/admin-user.yaml

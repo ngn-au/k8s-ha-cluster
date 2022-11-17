@@ -1,0 +1,51 @@
+apiVersion: cstor.openebs.io/v1
+kind: CStorPoolCluster
+metadata:
+  name: cstor-disk-pool
+  namespace: openebs
+spec:
+  pools:
+    - nodeSelector:
+        kubernetes.io/hostname: "k8s-ha1"
+      dataRaidGroups:
+        - blockDevices:
+            - blockDeviceName: "blockdevice-04da8199270ee52ec0d098a23ed49cc4"
+      poolConfig:
+        dataRaidGroupType: "stripe"
+
+    - nodeSelector:
+        kubernetes.io/hostname: "k8s-ha2" 
+      dataRaidGroups:
+        - blockDevices:
+            - blockDeviceName: "blockdevice-a26e9e0e346cb5eac7f3583372ac4310"
+      poolConfig:
+        dataRaidGroupType: "stripe"
+   
+    - nodeSelector:
+        kubernetes.io/hostname: "k8s-ha3"
+      dataRaidGroups:
+        - blockDevices:
+            - blockDeviceName: "blockdevice-806ea57859334db02b771bc05a1ee5da"
+      poolConfig:
+        dataRaidGroupType: "stripe"
+
+    - nodeSelector:
+        kubernetes.io/hostname: "k8s-ha4"
+      dataRaidGroups:
+        - blockDevices:
+            - blockDeviceName: "blockdevice-1278e7cf0f27e9c8bb9b48a7910a6472"
+      poolConfig:
+        dataRaidGroupType: "stripe"
+---
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  name: cstor-csi-pool
+provisioner: cstor.csi.openebs.io
+allowVolumeExpansion: true
+parameters:
+  cas-type: cstor
+  # cstorPoolCluster should have the name of the CSPC
+  cstorPoolCluster: cstor-disk-pool
+  # replicaCount should be <= no. of CSPI created in the selected CSPC
+  replicaCount: "3"

@@ -1,0 +1,86 @@
+- hosts: 'load_balancers'
+  become: yes
+
+  tasks:
+    - name: set up authorized keys for the root user
+      authorized_key: user=root key="{{item}}"
+      with_file:
+        - ~/.ssh/id_rsa.pub
+    
+    - name: set hostname
+      command: hostnamectl set-hostname {{inventory_hostname}}
+    
+    - name: keepalived=present
+      ansible.builtin.package:
+        name:  keepalived
+        state: present
+
+    - name: haproxy=present
+      ansible.builtin.package:
+        name:  haproxy
+        state: present
+
+    - name: curl=present
+      ansible.builtin.package:
+        name:  curl
+        state: present
+
+    - name: copy /etc/hosts
+      ansible.builtin.copy:
+        src: files/hosts
+        dest: /etc/hosts
+
+    - name: copy /etc/resolv.conf
+      ansible.builtin.copy:
+        src: files/resolv.conf
+        dest: /etc/resolv.conf
+
+    - name: /etc/hosts
+      blockinfile:
+        path: "/etc/hosts"
+        block: |
+             127.0.1.1	{{inventory_hostname}}
+
+    - name: copy check_apiserver.sh
+      ansible.builtin.copy:
+        src: files/check_apiserver.sh
+        dest: /etc/keepalived/check_apiserver.sh
+
+    - name: copy keepalived.conf
+      ansible.builtin.copy:
+        src: files/keepalived.conf
+        dest: /etc/keepalived/keepalived.conf
+
+    - name: copy haproxy.cfg
+      ansible.builtin.copy:
+        src: files/haproxy.cfg
+        dest: /etc/haproxy/haproxy.cfg
+
+    - name: group keepalived_script=present
+      ansible.builtin.group:
+        name: keepalived_script
+        state: present
+
+    - name: user keepalived_script=present
+      ansible.builtin.user:
+        name: keepalived_script
+        shell: /bin/bash
+        groups: keepalived_script
+        append: yes
+
+    - name: Enable service keepalived
+      ansible.builtin.systemd:
+        name: keepalived
+        enabled: yes
+        state: restarted
+
+    - name: Enable service haproxy
+      ansible.builtin.systemd:
+        name: haproxy
+        enabled: yes
+        state: restarted
+
+    - name: Reboot
+      shell: reboot
+      async: 1
+      poll: 0

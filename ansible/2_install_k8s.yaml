@@ -1,0 +1,146 @@
+- hosts: "cluster_nodes"
+  become: yes
+  tasks:
+    - name: set hostname
+      command: hostnamectl set-hostname {{inventory_hostname}}
+    
+    - name: copy /etc/hosts
+      ansible.builtin.copy:
+        src: files/hosts
+        dest: /etc/hosts
+
+    - name: copy /etc/resolv.conf
+      ansible.builtin.copy:
+        src: files/resolv.conf
+        dest: /etc/resolv.conf
+
+    - name: /etc/hosts
+      blockinfile:
+        path: "/etc/hosts"
+        block: |
+             127.0.1.1	{{inventory_hostname}}
+
+    - name: Create containerd config file
+      file:
+        path: "/etc/modules-load.d/containerd.conf"
+        state: "touch"
+
+    - name: Add conf for containerd
+      blockinfile:
+        path: "/etc/modules-load.d/containerd.conf"
+        block: |
+              overlay
+              br_netfilter
+
+    - name: modprobe
+      shell: |
+              modprobe overlay
+              modprobe br_netfilter
+
+    - name: open-iscsi=present
+      ansible.builtin.package:
+        name: open-iscsi
+        state: present
+
+    - name: gnupg2=present
+      ansible.builtin.package:
+        name: gnupg2
+        state: present
+
+    - name: GRUB_CMDLINE_LINUX_DEFAULT="systemd.unified_cgroup_hierarchy=0"
+      blockinfile:
+        path: "/etc/default/grub"
+        block: |
+              GRUB_CMDLINE_LINUX_DEFAULT="systemd.unified_cgroup_hierarchy=0"
+
+    - name: update-grub
+      command: update-grub
+
+    - name: Set system configurations for Kubernetes networking
+      file:
+        path: "/etc/sysctl.d/99-kubernetes-cri.conf"
+        state: "touch"
+
+    - name: Add conf for containerd
+      blockinfile:
+        path: "/etc/sysctl.d/99-kubernetes-cri.conf"
+        block: |
+              net.bridge.bridge-nf-call-iptables = 1
+              net.ipv4.ip_forward = 1
+              net.bridge.bridge-nf-call-ip6tables = 1
+
+    - name: Apply new settings
+      command: sysctl --system
+
+    - name: install containerd
+      shell: |
+              apt-get update && apt-get install -y containerd
+              mkdir -p /etc/containerd
+              containerd config default | tee /etc/containerd/config.toml
+              systemctl restart containerd
+
+    - name: copy containderd config
+      ansible.builtin.copy:
+        src: files/config.toml
+        dest: /etc/containerd/config.toml
+
+    - name: restart containerd
+      command: service containerd restart
+
+    - name: disable swap
+      shell: |
+              swapoff -a
+              sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
+
+    - name: install and configure dependencies
+      shell: |
+              apt-get update && apt-get install gnupg2 && apt-get install -y apt-transport-https curl
+              curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+
+    - name: Create kubernetes repo file
+      file:
+        path: "/etc/apt/sources.list.d/kubernetes.list"
+        state: "touch"
+
+    - name: Add K8s Source
+      blockinfile:
+        path: "/etc/apt/sources.list.d/kubernetes.list"
+        block: |
+              deb https://apt.kubernetes.io/ kubernetes-xenial main
+
+    - name: Create bashrc file
+      file:
+        path: "/root/.bashrc"
+        state: "touch"
+
+    - name: Bash completion
+      blockinfile:
+        path: "/root/.bashrc"
+        block: |
+              source <(kubectl completion bash)
+              alias k=kubectl
+              complete -o default -F __start_kubectl k
+
+    - name: install kubernetes
+      shell: |
+              apt-get update
+              apt-get install -y kubelet kubeadm kubectl
+              apt-mark hold kubelet kubeadm kubectl
+
+    - name: install helm
+      ansible.builtin.copy:
+        src: files/helm
+        mode: '0700'
+        dest: /usr/local/bin/helm
+
+    - name: Reboot to apply new grub
+      shell: reboot
+      async: 1
+      poll: 0
+
+    - name: wait for hosts to come alive
+      ansible.builtin.wait_for:
+        port: 22
+        host: "{{item}}"
+      delegate_to: localhost
+      loop: "{{groups['k8s-ha']}}"

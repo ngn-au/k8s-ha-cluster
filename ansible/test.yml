@@ -1,0 +1,11 @@
+- hosts: 127.0.0.1
+  become: yes
+
+  tasks:
+      - name: wait for k8s-ha
+        ansible.builtin.wait_for:
+          port: 22
+          host: "{{item}}"
+        delegate_to: localhost
+        loop: "{{groups['k8s-ha']}}"
+

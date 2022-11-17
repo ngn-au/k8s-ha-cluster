@@ -1,0 +1,20 @@
+- name: Create vms using xe (XCP-ng / XenServer) 
+  import_playbook: 0_create_vms.yaml
+  
+- name: Setup kube user
+  import_playbook: 1_kube_user.yaml
+
+- name: Install Kubernetes
+  import_playbook: 2_install_k8s.yaml
+
+- name: Setup Load Balancers
+  import_playbook: 3_setup_load_balancers.yaml
+
+- name: Cluster Initialization
+  import_playbook: 4_cluster_init.yaml
+
+- name: Prepare Cluster
+  import_playbook: 5_prepare_cluster.yaml
+
+- name: Deploy Dashboard
+  import_playbook: 6_k8s_deploy_dashboard.yaml

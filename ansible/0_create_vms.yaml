@@ -1,0 +1,53 @@
+- hosts: k8s-ha
+  gather_facts: no
+  tasks:
+    - name: Creating Debian 11 VM from Template
+      shell: xe vm-install template="Debian 11" new-name-label="{{inventory_hostname}}"
+      register: vm_install
+      delegate_to: xenhost-01
+    
+    - set_fact: 
+        vm_uuid={{ vm_install.stdout }}
+
+    - name: Start vm
+      shell: xe vm-start uuid={{vm_uuid}}
+      delegate_to: xenhost-01
+
+    - name: wait for dhcp IP
+      shell: xe vm-list uuid={{vm_uuid}} params=networks | awk -v RS='([0-9]+\\.){3}[0-9]+' 'RT{print RT}' | awk '{print $1; exit}' 
+      register: network
+      until: ("10.20.40." in network.stdout)
+      retries: 10
+      delay: 10
+      delegate_to: xenhost-01
+
+    - name: copy /etc/network/interfaces
+      ansible.builtin.copy:
+        src: files/interfaces
+        dest: /etc/network/interfaces
+      delegate_to: "{{network.stdout}}"
+
+    - name: Set eth0 IP
+      blockinfile:
+        path: "/etc/network/interfaces"
+        block: |
+              auto eth0
+              allow-hotplug eth0
+              iface eth0 inet static
+                address {{ansible_host}}
+                netmask 255.255.255.0
+                gateway 10.20.40.254
+      delegate_to: "{{network.stdout}}"
+
+    - name: Reboot
+      shell: reboot
+      async: 1
+      poll: 0
+      delegate_to: "{{network.stdout}}"
+
+    - name: wait for hosts to come alive on new ips
+      ansible.builtin.wait_for:
+        port: 22
+        host: "{{item}}"
+      delegate_to: localhost
+      loop: "{{groups['k8s-ha']}}"

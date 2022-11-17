@@ -1,0 +1,35 @@
+---
+all:
+  children:
+    load_balancers:
+      hosts:
+        k8s-halb1:
+          ansible_host: 10.20.40.30
+        k8s-halb2:
+          ansible_host: 10.20.40.29
+    cluster_nodes:
+      hosts:
+        k8s-ha1:
+          ansible_host: 10.20.40.21
+        k8s-ha2:
+          ansible_host: 10.20.40.22
+        k8s-ha3:
+          ansible_host: 10.20.40.23
+    xenhosts:
+      hosts:
+        xenhost-[01:04]:
+
+
+      vars:
+        ansible_python_interpreter: /usr/bin/python
+
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    ansible_user: root
+
+k8s-ha:
+  children:
+    load_balancers:
+    cluster_nodes:    
+  
+            
