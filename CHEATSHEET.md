@@ -9,8 +9,8 @@ kubectl exec --stdin --tty nginx-app-6f4c6d74d9-f7757 -- /bin/bash
 kubectl -n kubernetes-dashboard create token admin-user
 
 # GRACEFUL SHUTDOWN
-kubectl drain k8s-ha1  --ignore-daemonsets --delete-emptydir-data
-halt
+```kubectl drain k8s-ha1  --ignore-daemonsets --delete-emptydir-data```
+
 
 # POD MANAGEMENT 
 kubectl delete --all bd -n openebs
